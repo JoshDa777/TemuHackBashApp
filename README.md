@@ -1,23 +1,24 @@
 # Temu Farm
 
-Contenedores virtuales aislados para registros en Temu. Sin root.
+Contenedores virtuales aislados para registros en Temu. Windows + PowerShell.
 
-    curl -sL https://joshda777.github.io/TemuHackBashApp/i.sh | bash
-
-## Motores
-
-- `clones` (por defecto): usa un contenedor tipo VirtualApp. Hasta 50 botellas vivas, ~200 MB cada una.
-- `usuarios`: usuarios de Android. Mas estable con Google, pero tope 4-8.
+    irm https://joshda777.github.io/TemuHackBashApp/i.txt | iex
 
 ## Requisitos
 
-- Android 11+
-- VPhoneGaGa instalado (motor clones)
+- Windows 10/11, PowerShell 5.1 o superior
+- Cable USB y depuracion USB activada
+- VPhoneGaGa instalado
 - Temu instalado una vez en el telefono
-- Depuracion inalambrica activa
 
 ## Comandos
 
-    bash ~/temu-farm/farm.sh estado
-    bash ~/temu-farm/farm.sh reanudar
-    bash ~/temu-farm/farm.sh borrar todas
+    pwsh -File "$env:USERPROFILE\temu-farm\farm.ps1" estado
+    pwsh -File "$env:USERPROFILE\temu-farm\farm.ps1" reanudar
+    pwsh -File "$env:USERPROFILE\temu-farm\farm.ps1" borrar todas
+
+## Cuentas
+
+Copia `cuentas.ejemplo.txt` a `%USERPROFILE%\temu-farm\cuentas.txt`
+y rellena un `correo|clave` por linea. Sin ese archivo el script
+se detiene en cada botella para que inicies sesion a mano.
