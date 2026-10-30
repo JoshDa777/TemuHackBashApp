@@ -1,0 +1,32 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Temu Farm</title><meta name="theme-color" content="#0b0b12">
+<style>
+*{box-sizing:border-box}body{margin:0;background:#0b0b12;color:#ececf5;font:14px/1.5 -apple-system,Roboto,sans-serif}
+.w{max-width:520px;margin:0 auto;padding:22px 16px 40px}.top{display:flex;align-items:center;gap:9px}
+.d{width:11px;height:11px;border-radius:50%;background:#ff6a00;box-shadow:0 0 14px #ff6a00}
+h1{font-size:18px;margin:0;letter-spacing:2px}.v{margin-left:auto;font-size:10px;color:#6d6d8a;border:1px solid #26263a;padding:2px 6px;border-radius:5px}
+.s{color:#8a8aa3;font-size:12px;margin:4px 0 18px}.box{background:#15151f;border:1px solid #26263a;border-radius:13px;padding:13px;margin-bottom:12px}
+.lbl{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#9d9db8;margin-bottom:8px}
+pre{background:#0e0e17;border:1px solid #2c2c44;border-radius:8px;padding:11px;font-size:12px;white-space:pre-wrap;word-break:break-all;color:#9fe8b4;margin:0}
+button{width:100%;margin-top:9px;background:#ff6a00;color:#12100c;border:0;border-radius:8px;padding:11px;font-weight:800;font-size:13px}
+.os{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-bottom:12px}
+.card{background:#0e0e17;border:1px solid #26263a;border-radius:10px;padding:9px;text-align:center}
+.card b{display:block;font-size:11px;color:#cfcfe4}.card span{font-size:9px;color:#6d6d8a}
+.cmds{color:#a78bfa;font-size:11px}
+</style></head><body><div class="w">
+<div class="top"><span class="d"></span><h1>TEMU FARM</h1><span class="v">v2.0</span></div>
+<p class="s">Contenedores virtuales · hasta 50 botellas</p>
+<div class="box"><div class="lbl">Ejecuta esto</div>
+<pre id="c">curl -sL https://TUUSUARIO.github.io/temu-farm/i.sh | bash</pre>
+<button id="b">Copiar</button></div>
+<div class="os">
+<div class="card"><b>Termux</b><span>Android</span></div>
+<div class="card"><b>Arch</b><span>adb</span></div>
+<div class="card"><b>Win11</b><span>Git Bash</span></div></div>
+<div class="box"><div class="lbl">Motor</div>
+<pre class="cmds">--clones      hasta 50 · ligero
+--usuarios    tope 4-8 · GMS estable</pre></div>
+</div><script>
+document.getElementById('b').onclick=async()=>{await navigator.clipboard.writeText(document.getElementById('c').textContent);document.getElementById('b').textContent='Copiado';setTimeout(()=>document.getElementById('b').textContent='Copiar',1500)}
+</script></body></html>
