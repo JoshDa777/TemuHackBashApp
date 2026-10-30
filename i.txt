@@ -1,4 +1,4 @@
-# Temu Farm v3.1 - Windows / PowerShell
+# Temu Farm v3.2 - Windows / PowerShell
 $ErrorActionPreference = 'Continue'
 $Repo   = 'https://joshda777.github.io/TemuHackBashApp'
 $Dir    = Join-Path $env:USERPROFILE 'temu-farm'
@@ -160,7 +160,7 @@ function AbrirBotella($etq) {
 
 function IdDe($n) {
   $u = Adb shell pm list users
-  if ($u -match "UserInfo\{(\d+):$n:") { return [int]$Matches[1] }
+  if ($u -match "UserInfo\{(\d+):${n}:") { return [int]$Matches[1] }
   return $null
 }
 
@@ -303,7 +303,7 @@ switch ($cmd) {
   'nuevo'    { CmdNuevo; exit }
 }
 
-Say 'TEMU FARM v3.1'
+Say 'TEMU FARM v3.2'
 Instalar
 if (-not (Conectar)) { exit }
 Adb shell svc power stayon true | Out-Null
