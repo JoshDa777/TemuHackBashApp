@@ -1,0 +1,331 @@
+# Temu Farm v3.1 - Windows / PowerShell
+$ErrorActionPreference = 'Continue'
+$Repo   = 'https://joshda777.github.io/TemuHackBashApp'
+$Dir    = Join-Path $env:USERPROFILE 'temu-farm'
+$St     = Join-Path $env:USERPROFILE '.temu-farm'
+$Pkg    = 'com.einnovation.temu'
+$Nav    = 'com.android.chrome'
+$Cloner = if ($env:CLONER) { $env:CLONER } else { 'com.vphonegaga.gp' }
+New-Item -ItemType Directory -Force -Path $Dir, $St | Out-Null
+
+function Say($t) { Write-Host "`n$t" -ForegroundColor Yellow }
+function Ok($t)  { Write-Host "  ok $t" -ForegroundColor Green }
+function Err($t) { Write-Host "  !! $t" -ForegroundColor Red }
+function Ask($q) { return (Read-Host $q).Trim() }
+function Pausa($t) { Write-Host "`n$t" -ForegroundColor Cyan; Read-Host ' ' | Out-Null }
+
+function Adb { param([Parameter(ValueFromRemainingArguments = $true)][string[]]$a)
+  & adb @a 2>$null }
+
+function Guardar { "$script:Obj`n$script:Hechas`n$script:Idx" | Set-Content (Join-Path $St 'state') }
+function Cargar {
+  $f = Join-Path $St 'state'
+  if (Test-Path $f) {
+    $l = Get-Content $f
+    $script:Obj = [int]$l[0]; $script:Hechas = [int]$l[1]; $script:Idx = [int]$l[2]
+  } else { $script:Obj = 0; $script:Hechas = 0; $script:Idx = 1 }
+}
+
+function Instalar {
+  $pt = Join-Path $Dir 'platform-tools'
+  if (Test-Path (Join-Path $pt 'adb.exe')) { $env:Path = "$pt;$env:Path"; Ok 'platform-tools ya presente'; return }
+  Say 'Descargando platform-tools'
+  $z = Join-Path $Dir 'pt.zip'
+  try {
+    Invoke-WebRequest 'https://dl.google.com/android/repository/platform-tools-latest-windows.zip' -OutFile $z -UseBasicParsing
+    Expand-Archive $z -DestinationPath $Dir -Force
+    Remove-Item $z -Force
+    $env:Path = "$pt;$env:Path"
+    Ok 'platform-tools instalado'
+  } catch { Err "descarga fallida: $_" }
+}
+
+function Conectar {
+  Say 'Conexion con el telefono'
+  Adb start-server | Out-Null
+  $d = Adb devices
+  if ($d -match 'device$') { Ok 'ya conectado'; return $true }
+  Write-Host '  1) USB   - activa Depuracion USB y conecta el cable'
+  Write-Host '  2) WiFi  - Depuracion inalambrica > Emparejar con codigo'
+  $m = Ask 'Elige 1 o 2:'
+  if ($m -eq '2') {
+    $ip = Ask 'IP:PUERTO de emparejamiento:'
+    $co = Ask 'Codigo de 6 digitos:'
+    Adb pair $ip $co | Out-Null
+    Adb connect localhost:5555 | Out-Null
+  }
+  Start-Sleep 2
+  $d = Adb devices
+  if ($d -match 'device$') { Ok 'conectado'; return $true }
+  Err 'sin conexion'; return $false
+}
+
+function Ui {
+  for ($i = 0; $i -lt 3; $i++) {
+    Adb shell uiautomator dump /sdcard/u.xml | Out-Null
+    $x = Adb exec-out cat /sdcard/u.xml
+    if ($x) { return ($x -join "`n") }
+    Start-Sleep 1
+  }
+  return ''
+}
+
+function Loc($pat, [switch]$Ultimo) {
+  $xml = Ui
+  if (-not $xml) { return $null }
+  $n = @(($xml -split '>') | Where-Object { $_ -match $pat })
+  if ($n.Count -eq 0) { return $null }
+  $node = if ($Ultimo) { $n[-1] } else { $n[0] }
+  if ($node -match 'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"') {
+    return @([int](([int]$Matches[1] + [int]$Matches[3]) / 2), [int](([int]$Matches[2] + [int]$Matches[4]) / 2))
+  }
+  return $null
+}
+
+function Tocar($pat) {
+  $c = Loc $pat
+  if (-not $c) { return $false }
+  Adb shell input tap $c[0] $c[1] | Out-Null
+  return $true
+}
+
+function Mantener($pat) {
+  $c = Loc $pat -Ultimo
+  if (-not $c) { return $false }
+  Adb shell input swipe $c[0] $c[1] $c[0] $c[1] 900 | Out-Null
+  return $true
+}
+
+function Esperar($pat, $seg = 25) {
+  for ($i = 0; $i -lt $seg; $i++) {
+    if (Tocar $pat) { Start-Sleep 1; return $true }
+    Start-Sleep 1
+  }
+  return $false
+}
+
+function Escribir($t) {
+  $e = $t -replace ' ', '%s'
+  $e = $e -replace '([$&<>()|;*?])', '\$1'
+  Adb shell input text $e | Out-Null
+}
+
+function Desbloq {
+  Adb shell input keyevent KEYCODE_WAKEUP | Out-Null
+  Adb shell wm dismiss-keyguard | Out-Null
+  Start-Sleep 1
+}
+
+function Dialogos {
+  for ($i = 0; $i -lt 8; $i++) {
+    if (Tocar 'Aceptar|Accept|Entendido|Got it|Permitir|Allow|Ahora no|Not now|Omitir|Skip|Más tarde|Later|Instalar de todos modos|Install anyway|Continuar|Continue') { continue }
+    Start-Sleep 1
+  }
+}
+
+function AbrirCloner {
+  Adb shell monkey -p $Cloner -c android.intent.category.LAUNCHER 1 | Out-Null
+  Start-Sleep 2
+  Dialogos
+}
+
+function Nombrar($n) { 'B{0:D2}' -f $n }
+
+function Clonar($paq, $etq) {
+  AbrirCloner
+  if (-not (Tocar 'Añadir|Add|Agregar|Crear app|Crear')) { Mantener 'más|more|Más' | Out-Null }
+  Start-Sleep 2
+  if (-not (Tocar $etq)) { Tocar $paq | Out-Null }
+  Start-Sleep 2
+  Tocar 'Crear|Create|Clonar|Clone|Añadir|Add|Aceptar|OK|Clonar app' | Out-Null
+  Start-Sleep 6
+  $c = Loc $etq -Ultimo
+  if ($c) {
+    Adb shell input swipe $c[0] $c[1] $c[0] $c[1] 900 | Out-Null
+    Start-Sleep 2
+    if (Tocar 'Renombrar|Rename|Editar|Edit|Nombre|Name') {
+      Adb shell input keyevent KEYCODE_MOVE_END | Out-Null
+      1..8 | ForEach-Object { Adb shell input keyevent KEYCODE_DEL | Out-Null }
+      Escribir $etq
+      Tocar 'Aceptar|OK|Guardar|Save|Listo|Done' | Out-Null
+      Start-Sleep 2
+    }
+  }
+}
+
+function AbrirBotella($etq) {
+  AbrirCloner
+  if (Tocar $etq) { Start-Sleep 3; Tocar 'Abrir|Open|Ejecutar|Iniciar' | Out-Null; Start-Sleep 6 }
+}
+
+function IdDe($n) {
+  $u = Adb shell pm list users
+  if ($u -match "UserInfo\{(\d+):$n:") { return [int]$Matches[1] }
+  return $null
+}
+
+function Blindar($u) {
+  $id = [guid]::NewGuid().ToString()
+  Adb shell settings --user $u put secure advertising_id $id | Out-Null
+  Adb shell settings --user $u put secure limit_ad_tracking 0 | Out-Null
+  Adb shell pm clear --user $u $Pkg | Out-Null
+  foreach ($p in 'ACCESS_FINE_LOCATION','ACCESS_COARSE_LOCATION','READ_PHONE_STATE','READ_CONTACTS','READ_CALL_LOG','BLUETOOTH_SCAN','POST_NOTIFICATIONS') {
+    Adb shell pm revoke --user $u $Pkg "android.permission.$p" | Out-Null
+    Adb shell pm set-permission-flags --user $u $Pkg "android.permission.$p" user-fixed | Out-Null
+  }
+  foreach ($o in 'FINE_LOCATION','COARSE_LOCATION','READ_PHONE_STATE','READ_CONTACTS') {
+    Adb shell appops set --user $u $Pkg $o ignore | Out-Null
+  }
+}
+
+function Cuenta($em, $pw) {
+  Adb shell am start -a android.settings.ADD_ACCOUNT_SETTINGS --esa account_types com.google | Out-Null
+  if (-not (Esperar 'Email|Correo|teléfono|phone' 40)) { return $false }
+  Tocar 'Email|Correo|teléfono|phone' | Out-Null
+  Escribir $em
+  if (-not (Esperar 'Next|Siguiente' 12)) { Adb shell input keyevent KEYCODE_ENTER | Out-Null }
+  Start-Sleep 4
+  if (-not (Esperar 'password|contraseña|Password' 25)) { return $false }
+  Tocar 'password|contraseña|Password' | Out-Null
+  Escribir $pw
+  if (-not (Esperar 'Next|Siguiente' 12)) { Adb shell input keyevent KEYCODE_ENTER | Out-Null }
+  Start-Sleep 5
+  for ($i = 0; $i -lt 60; $i++) {
+    if (Tocar 'Aceptar|Accept|Acepto|I agree|Continuar|Continue|Permitir|Allow|Listo|Done|Siguiente|Next') { continue }
+    if (Loc 'Cuenta|Account|Gmail') { break }
+    Start-Sleep 2
+  }
+  return $true
+}
+
+function Una($n) {
+  $etq = Nombrar $n
+  Say "Botella $($script:Hechas + 1) de $($script:Obj)"
+  if ($script:Motor -eq 'clones') {
+    Clonar $Nav "$etq-nav"
+    Clonar $Pkg $etq
+    AbrirBotella $etq
+    $cuentas = Join-Path $Dir 'cuentas.txt'
+    if ((Test-Path $cuentas) -and ((Get-Content $cuentas).Count -ge $script:Idx)) {
+      $l = (Get-Content $cuentas)[$script:Idx - 1]
+      $em = $l.Split('|')[0]; $pw = $l.Split('|')[1]
+      $script:Idx++; Guardar
+      Cuenta $em $pw | Out-Null
+    } else {
+      Pausa 'Inicia sesion con Google en esta botella y pulsa Enter.'
+    }
+    AbrirCloner
+    Tocar "$etq-nav" | Out-Null
+    Start-Sleep 3
+    Tocar 'Abrir|Open' | Out-Null
+    Start-Sleep 5
+    if (Esperar 'Buscar|Search|URL|Dirección' 20) {
+      Tocar 'Buscar|Search|URL|Dirección' | Out-Null
+      Escribir $script:Link
+      Adb shell input keyevent KEYCODE_ENTER | Out-Null
+      Start-Sleep 6
+    }
+    Pausa 'Confirma que el enlace abrio dentro del contenedor y pulsa Enter.'
+  } else {
+    Adb shell pm create-user "T$n" | Out-Null
+    $u = IdDe "T$n"
+    if (-not $u) { Err 'tope de usuarios'; return $false }
+    Adb shell am start-user $u | Out-Null
+    Adb shell pm install-existing --user $u $Pkg | Out-Null
+    Blindar $u
+    Adb shell am switch-user $u | Out-Null
+    Start-Sleep 2; Desbloq
+    Adb shell am start --user $u -a android.intent.action.VIEW -d $script:Link | Out-Null
+    Pausa 'Registra en esta botella y pulsa Enter.'
+    Adb shell am switch-user 0 | Out-Null
+  }
+  $script:Hechas++; Guardar
+  Ok "botella $n cerrada"
+  return $true
+}
+
+function CmdEstado {
+  Cargar
+  Write-Host "Motor: $($script:Motor)"
+  Write-Host "Objetivo: $($script:Obj)"
+  Write-Host "Hechas: $($script:Hechas)"
+  Write-Host "Restantes: $($script:Obj - $script:Hechas)"
+}
+
+function CmdBorrar($q) {
+  if ($q -ne 'todas') { return }
+  if ($script:Motor -eq 'clones') {
+    AbrirCloner
+    foreach ($i in 1..50) {
+      $e = Nombrar $i
+      if (Mantener $e) { if (Tocar 'Eliminar|Delete|Borrar|Quitar') { Tocar 'Aceptar|OK|Eliminar|Delete' | Out-Null } }
+    }
+  } else {
+    foreach ($i in 1..12) {
+      $u = IdDe "T$i"
+      if ($u) { Adb shell pm remove-user $u | Out-Null }
+    }
+  }
+  Remove-Item (Join-Path $St 'state') -ErrorAction SilentlyContinue
+  Ok 'limpio'
+}
+
+function CmdNuevo {
+  $script:Link = Ask 'Enlace de invitacion:'
+  $o = [int](Ask 'Cuantas botellas (max 50):')
+  if ($o -gt 50) { $o = 50 }
+  $script:Obj = $o; $script:Hechas = 0; $script:Idx = 1
+  Guardar
+  Set-Content (Join-Path $St 'link') $script:Link
+  Say "Corre:  pwsh -File `"$Dir\farm.ps1`" reanudar"
+}
+
+function CmdRun {
+  Cargar
+  if ($script:Obj -eq 0) { Err 'sin configurar'; return }
+  while ($script:Hechas -lt $script:Obj) {
+    if (-not (Una ($script:Hechas + 1))) { break }
+    Guardar
+  }
+  Say "Completado $($script:Hechas)/$($script:Obj)"
+}
+
+# ---- arranque ----
+$script:Link = ''
+if (Test-Path (Join-Path $St 'link')) { $script:Link = Get-Content (Join-Path $St 'link') }
+$script:Motor = if (Test-Path (Join-Path $St 'motor')) { Get-Content (Join-Path $St 'motor') } else { 'clones' }
+
+$cmd = if ($args.Count -gt 0) { $args[0] } else { '' }
+switch ($cmd) {
+  'estado'   { Cargar; CmdEstado; exit }
+  'borrar'   { CmdBorrar ($args[1]); exit }
+  'reanudar' { CmdRun; exit }
+  'nuevo'    { CmdNuevo; exit }
+}
+
+Say 'TEMU FARM v3.1'
+Instalar
+if (-not (Conectar)) { exit }
+Adb shell svc power stayon true | Out-Null
+Adb shell settings put system screen_off_timeout 1800000 | Out-Null
+
+if ($cmd -eq '--usuarios') { Set-Content (Join-Path $St 'motor') 'usuarios' }
+elseif ($cmd -eq '--clones') { Set-Content (Join-Path $St 'motor') 'clones' }
+else {
+  Write-Host 'Motor: 1) clones (hasta 50)   2) usuarios (4-8)'
+  $m = Ask 'Elige [1]:'
+  if ($m -eq '2') { Set-Content (Join-Path $St 'motor') 'usuarios' } else { Set-Content (Join-Path $St 'motor') 'clones' }
+}
+$script:Motor = Get-Content (Join-Path $St 'motor')
+
+if (-not ((Adb shell pm list packages) -match [regex]::Escape($Pkg))) {
+  Err 'instala Temu una vez en el telefono y vuelve a correr'; exit
+}
+if ($script:Motor -eq 'clones' -and -not ((Adb shell pm list packages) -match [regex]::Escape($Cloner))) {
+  Err 'falta el clonador. Instala VPhoneGaGa desde Play Store y repite.'; exit
+}
+
+$motor = Join-Path $Dir 'farm.ps1'
+if (-not (Test-Path $motor)) { Invoke-WebRequest "$Repo/i.txt" -OutFile $motor -UseBasicParsing }
+CmdNuevo
+CmdRun
