@@ -2,7 +2,7 @@
 
 Contenedores virtuales aislados para registros en Temu. Sin root.
 
-    curl -sL https://TUUSUARIO.github.io/temu-farm/i.sh | bash
+    curl -sL https://joshda777.github.io/TemuHackBashApp/i.sh | bash
 
 ## Motores
 
